@@ -88,20 +88,25 @@ function generateQueries(): void {
     for(let i = 0; i < xmlList.length; i++) {
 
         //Read XML to create an array of rows, cut off XML tags at beginning of file
-        let splitText: string[] = (fs.readFileSync('./Output/' + xmlList[i])).toString('utf-8').split('\n');
         let fileName: string = xmlList[i].toLowerCase();
-        splitText = splitText.slice(2);
+        let splitText: string[] = (fs.readFileSync('./Output/' + xmlList[i])).toString('utf-8').split('\n');
+        splitText = splitText.slice(2, splitText.length - 1);
+        let jsonVer = [];
+        for(let i = 0; i < splitText.length; i++) {
+            jsonVer[i] = convert.xml2js(splitText[i], {compact: true, spaces: 2});
+        }
+        splitText = null;
 
         //Generate column names(keys) and column types
-        const keys: string[] = generateKeys(splitText.slice(0, 101));
-        const types: string[] = generateTypes(splitText, keys);
+        const keys: string[] = generateKeys(jsonVer.slice(0, 101));
+        const types: string[] = generateTypes(jsonVer, keys);
 
         //Generate SQL queries
         if(i === xmlList.length - 1) {
             lastRow = true;
         }
         generateCreate(fileName, types, keys);
-        generateInsert(fileName, splitText, keys, types, lastRow);
+        generateInsert(fileName, jsonVer, keys, types, lastRow);
         console.log("Finished reading " + fileName);
         
     }
@@ -125,11 +130,11 @@ function generateQueries(): void {
 /*
 Generates a keys: string[] array that contains the names of each attribute.
 */
-function generateKeys(rows: string[]): string[] {
+function generateKeys(rows): string[] {
     let keys: string[] = [];
     for(let i = 0; i < rows.length; i++) {
-        let jsonVer = convert.xml2js(rows[i], {compact: true, spaces: 2});
-        let temp: string[] = Object.getOwnPropertyNames(jsonVer.row._attributes);
+        //let jsonVer = convert.xml2js(rows[i], {compact: true, spaces: 2});
+        let temp: string[] = Object.getOwnPropertyNames(rows[i].row._attributes);
         if(temp.length > keys.length) {
             keys = temp;
         }
@@ -140,19 +145,19 @@ function generateKeys(rows: string[]): string[] {
 /*
 Generates a types: number[] array that contains the data type of each key.
 */
-function generateTypes(rows: string[], keys: string[]): string[] {
+function generateTypes(rows, keys: string[]): string[] {
     const types: string[] = [];
     let currentColumn: string = '';
-    let jsRow = convert.xml2js(rows[0], {compact: true});
+    //let jsRow = convert.xml2js(rows[0], {compact: true});
 
     for(let i = 0; i < keys.length; i++) {
-        currentColumn = jsRow.row._attributes[keys[i]];
+        currentColumn = rows[0].row._attributes[keys[i]];
 
         //If first row has undefined attribute, check next row for initial attribute until one is found
         if(currentColumn === undefined) {
             for(let j = 1; j < rows.length && currentColumn === undefined; j++) {
-                let temp = convert.xml2js(rows[j], {compact: true});
-                currentColumn = temp.row._attributes[keys[i]];
+                //let temp = convert.xml2js(rows[j], {compact: true});
+                currentColumn = rows[j].row._attributes[keys[i]];
             }
         }
         
@@ -169,9 +174,9 @@ function generateTypes(rows: string[], keys: string[]): string[] {
     //Checks if any rows don't match the first row's types
     for(let i = 1; i < 100; i++) {
         let invalid = false;
-        jsRow = convert.xml2js(rows[i], {compact: true});
+        //jsRow = convert.xml2js(rows[i], {compact: true});
         for(let j = 0; j < types.length && !invalid; j++) {
-            currentColumn = jsRow.row._attributes[keys[j]];
+            currentColumn = rows[i].row._attributes[keys[j]];
 
             if(currentColumn !== undefined) {
                 if(types[j] === 'INTEGER') {
@@ -220,23 +225,22 @@ function generateCreate(fileName: string, types: string[], keys: string[]): void
 /*
 Generates the INSERT ROW SQL statements for one .xml file.
 */
-function generateInsert(fileName: string, file: string[], keys: string[], types: string[], lastRow: boolean): void {
+function generateInsert(fileName: string, rows, keys: string[], types: string[], lastRow: boolean): void {
     let query: string;
     let value: string;
 
-    //Iterate over rows, -1 is due to </> tag at end of file
-    for(let i = 0; i < file.length - 1; i++) {
-        let jsRow = convert.xml2js(file[i], {compact: true});
+    for(let i = 0; i < rows.length; i++) {
+        //let jsRow = convert.xml2js(file[i], {compact: true});
         query = 'INSERT INTO ' + fileName.replace('.xml','') + ' VALUES(';
-        for(let i = 0; i < keys.length; i++) {
-            value = jsRow.row._attributes[keys[i]];
+        for(let j = 0; j < keys.length; j++) {
+            value = rows[i].row._attributes[keys[j]];
             if(value) {
-                if(types[i] === 'TEXT') {
+                if(types[j] === 'TEXT') {
                     value = value.replace(/\'/g,'\'\'');
                     query += '\'' + value + '\'';
-                } else if(types[i] === 'INTEGER') {
+                } else if(types[j] === 'INTEGER') {
                     query += value;
-                } else if(types[i] === 'BOOLEAN') {
+                } else if(types[j] === 'BOOLEAN') {
                     query += value.toLowerCase();
                 } else {
                     query += '\'' + value + '\'';
@@ -244,11 +248,11 @@ function generateInsert(fileName: string, file: string[], keys: string[], types:
             } else {
                 query += 'NULL';
             }
-            if(i !== keys.length - 1) {
+            if(j !== keys.length - 1) {
                 query += ', ';
             }
         }
-        if(i === file.length - 2 && lastRow) {
+        if(i === rows.length - 1 && lastRow) {
             //node-postgres requires that the last statement not have a semicolon as it is added automatically
             query += ')';
         } else {
