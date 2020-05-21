@@ -77,7 +77,9 @@ function unzipFile() {
 //Section 2: Generate and execute queries
 function generateQueries(): void {
     //Get file list from folder
+    choice = choice.replace('.meta','_meta');
     let firstQuery = 'CREATE SCHEMA ' + choice.substr(0, choice.indexOf('.')) + '; SET search_path TO ' + choice.substr(0, choice.indexOf('.')) + ';';
+    console.log(firstQuery);
     fs.writeFileSync('./Output/complete.sql', firstQuery);
     
     let xmlList: string[] = fs.readdirSync('./Output');
@@ -172,7 +174,7 @@ function generateTypes(rows, keys: string[]): string[] {
         }
     }
     //Checks if any rows don't match the first row's types
-    for(let i = 1; i < 100; i++) {
+    for(let i = 1; i < 100 && i < rows.length; i++) {
         let invalid = false;
         //jsRow = convert.xml2js(rows[i], {compact: true});
         for(let j = 0; j < types.length && !invalid; j++) {
