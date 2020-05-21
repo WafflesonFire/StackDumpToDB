@@ -1,0 +1,7 @@
+{
+    "address": "localhost",
+    "port": 5432,
+    "database": "stackexchange",
+    "username": "put username here",
+    "password": "put password here"
+}
