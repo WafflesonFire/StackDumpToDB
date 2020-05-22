@@ -173,27 +173,29 @@ function generateTypes(jsonArray, columnList: string[]): string[] {
             dataTypes.push('TEXT');
         }
     }
-    //Checks if any rows don't match the first row's dataTypes
-    //Possible optimization to be done here
-    for(let i = 1; i < 100 && i < jsonArray.length; i++) {
+    //Checks if any rows don't match the first row's data types
+    for(let i = 0; i < dataTypes.length; i++) {
+        if(dataTypes[i] === 'TEXT') {
+            continue;
+        }
         let invalid: boolean = false;
-        for(let j = 0; j < dataTypes.length && !invalid; j++) {
-            currentColumn = jsonArray[i].row._attributes[columnList[j]];
+        for(let j = 1; j < 100 && j < jsonArray.length && !invalid; j++) {
+            currentColumn = jsonArray[j].row._attributes[columnList[i]];
 
             if(currentColumn !== undefined) {
-                if(dataTypes[j] === 'INTEGER') {
+                if(dataTypes[i] === 'INTEGER') {
                     if(!Number(currentColumn) && Number(currentColumn) !== 0) {
-                        dataTypes[j] = 'TEXT';
+                        dataTypes[i] = 'TEXT';
                         invalid = true;
                     }
-                } else if(dataTypes[j] === 'TIMESTAMP') {
+                } else if(dataTypes[i] === 'TIMESTAMP') {
                     if(new Date(currentColumn).toString() === 'Invalid Date') {
-                        dataTypes[j] = 'TEXT';
+                        dataTypes[i] = 'TEXT';
                         invalid = true;
                     }
-                } else if(dataTypes[j] === 'BOOLEAN') {
+                } else if(dataTypes[i] === 'BOOLEAN') {
                     if(currentColumn.toLowerCase() !== 'false' && currentColumn.toLowerCase() !== 'true') {
-                        dataTypes[j] = 'TEXT';
+                        dataTypes[i] = 'TEXT';
                         invalid = true;
                     }
                 }
