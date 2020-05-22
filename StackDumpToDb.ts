@@ -93,7 +93,7 @@ function generateQueries(): void {
     for(let i = 0; i < xmlList.length; i++) {
 
         //Read XML to create an array of rows, cut off XML tags at beginning of file
-        let fileName: string = xmlList[i].toLowerCase();
+        let currentXml: string = xmlList[i].toLowerCase();
         let splitText: string[] = (fs.readFileSync('./Output/' + xmlList[i])).toString('utf-8').split('\n');
         splitText = splitText.slice(2, splitText.length - 1);
         let jsonArray = [];
@@ -102,17 +102,17 @@ function generateQueries(): void {
         }
         splitText = null;
 
-        //Generate column names(keys) and column data types
-        const keys: string[] = generateKeys(jsonArray.slice(0, 101));
-        const dataTypes: string[] = generateTypes(jsonArray, keys);
+        //Generate column names and column data types
+        const columnList: string[] = generateColumns(jsonArray.slice(0, 101));
+        const dataTypes: string[] = generateTypes(jsonArray, columnList);
 
         //Generate SQL queries
         if(i === xmlList.length - 1) {
             lastRow = true;
         }
-        generateCreate(fileName, dataTypes, keys);
-        generateInsert(fileName, jsonArray, keys, dataTypes, lastRow);
-        console.log(fileName + ' processed.');
+        generateCreate(currentXml, dataTypes, columnList);
+        generateInsert(currentXml, jsonArray, columnList, dataTypes, lastRow);
+        console.log(currentXml + ' processed.');
         
     }
 
@@ -133,33 +133,33 @@ function generateQueries(): void {
 }
 
 /*
-Generates a keys: string[] array that contains the names of each attribute.
+Generates a column list that contains the names of each column.
 */
-function generateKeys(jsonArray): string[] {
-    let keys: string[] = [];
+function generateColumns(jsonArray): string[] {
+    let columnList: string[] = [];
     for(let i = 0; i < jsonArray.length; i++) {
         let temp: string[] = Object.getOwnPropertyNames(jsonArray[i].row._attributes);
-        if(temp.length > keys.length) {
-            keys = temp;
+        if(temp.length > columnList.length) {
+            columnList = temp;
         }
     }
-    return keys;
+    return columnList;
 }
 
 /*
 Generates a dataTypes: number[] array that contains the data type of each key.
 */
-function generateTypes(jsonArray, keys: string[]): string[] {
+function generateTypes(jsonArray, columnList: string[]): string[] {
     const dataTypes: string[] = [];
     let currentColumn: string = '';
 
-    for(let i = 0; i < keys.length; i++) {
-        currentColumn = jsonArray[0].row._attributes[keys[i]];
+    for(let i = 0; i < columnList.length; i++) {
+        currentColumn = jsonArray[0].row._attributes[columnList[i]];
 
         //If first row has undefined attribute, check next row for initial attribute until one is found
         if(currentColumn === undefined) {
             for(let j = 1; j < jsonArray.length && currentColumn === undefined; j++) {
-                currentColumn = jsonArray[j].row._attributes[keys[i]];
+                currentColumn = jsonArray[j].row._attributes[columnList[i]];
             }
         }
         
@@ -178,7 +178,7 @@ function generateTypes(jsonArray, keys: string[]): string[] {
     for(let i = 1; i < 100 && i < jsonArray.length; i++) {
         let invalid: boolean = false;
         for(let j = 0; j < dataTypes.length && !invalid; j++) {
-            currentColumn = jsonArray[i].row._attributes[keys[j]];
+            currentColumn = jsonArray[i].row._attributes[columnList[j]];
 
             if(currentColumn !== undefined) {
                 if(dataTypes[j] === 'INTEGER') {
@@ -207,18 +207,18 @@ function generateTypes(jsonArray, keys: string[]): string[] {
 /*
 Generates the CREATE TABLE SQL statement for one .xml file.
 */
-function generateCreate(fileName: string, dataTypes: string[], keys: string[]): void {
+function generateCreate(currentXml: string, dataTypes: string[], columnList: string[]): void {
     let query: string;
 
-    console.log('Processing ' + fileName + '...');
-    query = 'CREATE TABLE ' + fileName.replace('.xml','') + '(\n';
-    for(let i = 0; i < keys.length; i++) {
+    console.log('Processing ' + currentXml + '...');
+    query = 'CREATE TABLE ' + currentXml.replace('.xml','') + '(\n';
+    for(let i = 0; i < columnList.length; i++) {
         if(i === 0) {
-            query += keys[i] + ' ' + dataTypes[i] + ' PRIMARY KEY,\n';
-        } else if(i === keys.length - 1) {
-            query += keys[i] + ' ' + dataTypes[i] + '\n);\n\n';
+            query += columnList[i] + ' ' + dataTypes[i] + ' PRIMARY KEY,\n';
+        } else if(i === columnList.length - 1) {
+            query += columnList[i] + ' ' + dataTypes[i] + '\n);\n\n';
         } else {
-            query += keys[i] + ' ' + dataTypes[i] + ',\n';
+            query += columnList[i] + ' ' + dataTypes[i] + ',\n';
         }
     }
     fs.appendFileSync('./Output/temp.sql', query);
@@ -227,14 +227,14 @@ function generateCreate(fileName: string, dataTypes: string[], keys: string[]): 
 /*
 Generates the INSERT ROW SQL statements for one .xml file.
 */
-function generateInsert(fileName: string, jsonArray, keys: string[], dataTypes: string[], lastRow: boolean): void {
+function generateInsert(currentXml: string, jsonArray, columnList: string[], dataTypes: string[], lastRow: boolean): void {
     let query: string;
     let value: string;
 
     for(let i = 0; i < jsonArray.length; i++) {
-        query = 'INSERT INTO ' + fileName.replace('.xml','') + ' VALUES(';
-        for(let j = 0; j < keys.length; j++) {
-            value = jsonArray[i].row._attributes[keys[j]];
+        query = 'INSERT INTO ' + currentXml.replace('.xml','') + ' VALUES(';
+        for(let j = 0; j < columnList.length; j++) {
+            value = jsonArray[i].row._attributes[columnList[j]];
             if(value) {
                 if(dataTypes[j] === 'TEXT') {
                     value = value.replace(/\'/g,'\'\'');
@@ -249,7 +249,7 @@ function generateInsert(fileName: string, jsonArray, keys: string[], dataTypes: 
             } else {
                 query += 'NULL';
             }
-            if(j !== keys.length - 1) {
+            if(j !== columnList.length - 1) {
                 query += ', ';
             }
         }
