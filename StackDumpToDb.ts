@@ -96,22 +96,22 @@ function generateQueries(): void {
         let fileName: string = xmlList[i].toLowerCase();
         let splitText: string[] = (fs.readFileSync('./Output/' + xmlList[i])).toString('utf-8').split('\n');
         splitText = splitText.slice(2, splitText.length - 1);
-        let jsonVer = [];
+        let jsonArray = [];
         for(let i = 0; i < splitText.length; i++) {
-            jsonVer[i] = convert.xml2js(splitText[i], {compact: true, spaces: 2});
+            jsonArray[i] = convert.xml2js(splitText[i], {compact: true});
         }
         splitText = null;
 
-        //Generate column names(keys) and column types
-        const keys: string[] = generateKeys(jsonVer.slice(0, 101));
-        const types: string[] = generateTypes(jsonVer, keys);
+        //Generate column names(keys) and column data types
+        const keys: string[] = generateKeys(jsonArray.slice(0, 101));
+        const dataTypes: string[] = generateTypes(jsonArray, keys);
 
         //Generate SQL queries
         if(i === xmlList.length - 1) {
             lastRow = true;
         }
-        generateCreate(fileName, types, keys);
-        generateInsert(fileName, jsonVer, keys, types, lastRow);
+        generateCreate(fileName, dataTypes, keys);
+        generateInsert(fileName, jsonArray, keys, dataTypes, lastRow);
         console.log(fileName + ' processed.');
         
     }
@@ -135,10 +135,10 @@ function generateQueries(): void {
 /*
 Generates a keys: string[] array that contains the names of each attribute.
 */
-function generateKeys(rows): string[] {
+function generateKeys(jsonArray): string[] {
     let keys: string[] = [];
-    for(let i = 0; i < rows.length; i++) {
-        let temp: string[] = Object.getOwnPropertyNames(rows[i].row._attributes);
+    for(let i = 0; i < jsonArray.length; i++) {
+        let temp: string[] = Object.getOwnPropertyNames(jsonArray[i].row._attributes);
         if(temp.length > keys.length) {
             keys = temp;
         }
@@ -147,52 +147,53 @@ function generateKeys(rows): string[] {
 }
 
 /*
-Generates a types: number[] array that contains the data type of each key.
+Generates a dataTypes: number[] array that contains the data type of each key.
 */
-function generateTypes(rows, keys: string[]): string[] {
-    const types: string[] = [];
+function generateTypes(jsonArray, keys: string[]): string[] {
+    const dataTypes: string[] = [];
     let currentColumn: string = '';
 
     for(let i = 0; i < keys.length; i++) {
-        currentColumn = rows[0].row._attributes[keys[i]];
+        currentColumn = jsonArray[0].row._attributes[keys[i]];
 
         //If first row has undefined attribute, check next row for initial attribute until one is found
         if(currentColumn === undefined) {
-            for(let j = 1; j < rows.length && currentColumn === undefined; j++) {
-                currentColumn = rows[j].row._attributes[keys[i]];
+            for(let j = 1; j < jsonArray.length && currentColumn === undefined; j++) {
+                currentColumn = jsonArray[j].row._attributes[keys[i]];
             }
         }
         
         if(Number(currentColumn) || Number(currentColumn) === 0) {
-            types.push('INTEGER');
+            dataTypes.push('INTEGER');
         } else if(new Date(currentColumn).toString() !== 'Invalid Date') {
-            types.push('TIMESTAMP');
+            dataTypes.push('TIMESTAMP');
         } else if(currentColumn.toLowerCase() === 'false' || currentColumn.toLowerCase() === 'true') {
-            types.push('BOOLEAN');
+            dataTypes.push('BOOLEAN');
         } else {
-            types.push('TEXT');
+            dataTypes.push('TEXT');
         }
     }
-    //Checks if any rows don't match the first row's types
-    for(let i = 1; i < 100 && i < rows.length; i++) {
-        let invalid = false;
-        for(let j = 0; j < types.length && !invalid; j++) {
-            currentColumn = rows[i].row._attributes[keys[j]];
+    //Checks if any rows don't match the first row's dataTypes
+    //Possible optimization to be done here
+    for(let i = 1; i < 100 && i < jsonArray.length; i++) {
+        let invalid: boolean = false;
+        for(let j = 0; j < dataTypes.length && !invalid; j++) {
+            currentColumn = jsonArray[i].row._attributes[keys[j]];
 
             if(currentColumn !== undefined) {
-                if(types[j] === 'INTEGER') {
+                if(dataTypes[j] === 'INTEGER') {
                     if(!Number(currentColumn) && Number(currentColumn) !== 0) {
-                        types[j] = 'TEXT';
+                        dataTypes[j] = 'TEXT';
                         invalid = true;
                     }
-                } else if(types[j] === 'TIMESTAMP') {
+                } else if(dataTypes[j] === 'TIMESTAMP') {
                     if(new Date(currentColumn).toString() === 'Invalid Date') {
-                        types[j] = 'TEXT';
+                        dataTypes[j] = 'TEXT';
                         invalid = true;
                     }
-                } else if(types[j] === 'BOOLEAN') {
+                } else if(dataTypes[j] === 'BOOLEAN') {
                     if(currentColumn.toLowerCase() !== 'false' && currentColumn.toLowerCase() !== 'true') {
-                        types[j] = 'TEXT';
+                        dataTypes[j] = 'TEXT';
                         invalid = true;
                     }
                 }
@@ -200,24 +201,24 @@ function generateTypes(rows, keys: string[]): string[] {
         }
     }
     
-    return types;
+    return dataTypes;
 }
 
 /*
 Generates the CREATE TABLE SQL statement for one .xml file.
 */
-function generateCreate(fileName: string, types: string[], keys: string[]): void {
+function generateCreate(fileName: string, dataTypes: string[], keys: string[]): void {
     let query: string;
 
     console.log('Processing ' + fileName + '...');
     query = 'CREATE TABLE ' + fileName.replace('.xml','') + '(\n';
     for(let i = 0; i < keys.length; i++) {
         if(i === 0) {
-            query += keys[i] + ' ' + types[i] + ' PRIMARY KEY,\n';
+            query += keys[i] + ' ' + dataTypes[i] + ' PRIMARY KEY,\n';
         } else if(i === keys.length - 1) {
-            query += keys[i] + ' ' + types[i] + '\n);\n\n';
+            query += keys[i] + ' ' + dataTypes[i] + '\n);\n\n';
         } else {
-            query += keys[i] + ' ' + types[i] + ',\n';
+            query += keys[i] + ' ' + dataTypes[i] + ',\n';
         }
     }
     fs.appendFileSync('./Output/temp.sql', query);
@@ -226,21 +227,21 @@ function generateCreate(fileName: string, types: string[], keys: string[]): void
 /*
 Generates the INSERT ROW SQL statements for one .xml file.
 */
-function generateInsert(fileName: string, rows, keys: string[], types: string[], lastRow: boolean): void {
+function generateInsert(fileName: string, jsonArray, keys: string[], dataTypes: string[], lastRow: boolean): void {
     let query: string;
     let value: string;
 
-    for(let i = 0; i < rows.length; i++) {
+    for(let i = 0; i < jsonArray.length; i++) {
         query = 'INSERT INTO ' + fileName.replace('.xml','') + ' VALUES(';
         for(let j = 0; j < keys.length; j++) {
-            value = rows[i].row._attributes[keys[j]];
+            value = jsonArray[i].row._attributes[keys[j]];
             if(value) {
-                if(types[j] === 'TEXT') {
+                if(dataTypes[j] === 'TEXT') {
                     value = value.replace(/\'/g,'\'\'');
                     query += '\'' + value + '\'';
-                } else if(types[j] === 'INTEGER') {
+                } else if(dataTypes[j] === 'INTEGER') {
                     query += value;
-                } else if(types[j] === 'BOOLEAN') {
+                } else if(dataTypes[j] === 'BOOLEAN') {
                     query += value.toLowerCase();
                 } else {
                     query += '\'' + value + '\'';
@@ -252,7 +253,7 @@ function generateInsert(fileName: string, rows, keys: string[], types: string[],
                 query += ', ';
             }
         }
-        if(i === rows.length - 1 && lastRow) {
+        if(i === jsonArray.length - 1 && lastRow) {
             //node-postgres requires that the last statement not have a semicolon as it is added automatically
             query += ')';
         } else {
