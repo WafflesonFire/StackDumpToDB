@@ -76,10 +76,12 @@ function unzipFile() {
 
 //Section 2: Generate and execute queries
 function generateQueries(): void {
-    //Get file list from folder
+    //Create schema and get list of xml files
     choice = choice.replace('.meta','_meta');
+    if(Number(choice.charAt(0) || choice.charAt(0) === '0')) {
+        choice = '_' + choice;
+    }
     let firstQuery = 'CREATE SCHEMA ' + choice.substr(0, choice.indexOf('.')) + '; SET search_path TO ' + choice.substr(0, choice.indexOf('.')) + ';';
-    console.log(firstQuery);
     fs.writeFileSync('./Output/complete.sql', firstQuery);
     
     let xmlList: string[] = fs.readdirSync('./Output');
