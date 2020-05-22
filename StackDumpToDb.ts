@@ -67,7 +67,7 @@ function downloadFile(url: string) {
 Unzips a file using 7zip-min.
 */
 function unzipFile() {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
 		_7z.unpack('./' + choice, './Output', err => {
 			resolve();
 		});
@@ -81,14 +81,15 @@ function generateQueries(): void {
     if(Number(choice.charAt(0) || choice.charAt(0) === '0')) {
         choice = '_' + choice;
     }
-    let firstQuery = 'CREATE SCHEMA ' + choice.substr(0, choice.indexOf('.')) + '; SET search_path TO ' + choice.substr(0, choice.indexOf('.')) + ';';
-    fs.writeFileSync('./Output/complete.sql', firstQuery);
+    let firstQuery = 'CREATE SCHEMA ' + choice.substr(0, choice.indexOf('.'));
+    firstQuery += '; SET search_path TO ' + choice.substr(0, choice.indexOf('.')) + ';';
+    fs.writeFileSync('./Output/temp.sql', firstQuery);
     
     let xmlList: string[] = fs.readdirSync('./Output');
     xmlList = xmlList.filter(file => file.substring(file.length - 3) === 'xml');
     
     //Loop through files in folder
-    let lastRow = false;
+    let lastRow: boolean = false;
     for(let i = 0; i < xmlList.length; i++) {
 
         //Read XML to create an array of rows, cut off XML tags at beginning of file
@@ -111,15 +112,15 @@ function generateQueries(): void {
         }
         generateCreate(fileName, types, keys);
         generateInsert(fileName, jsonVer, keys, types, lastRow);
-        console.log("Finished reading " + fileName);
+        console.log(fileName + ' processed.');
         
     }
 
     const superQuery = {
-        text: fs.readFileSync('./Output/complete.sql').toString(),
+        text: fs.readFileSync('./Output/temp.sql').toString(),
         rowMode: 'array',
     }
-
+    console.log('Submitting queries to database...');
     pool.query(superQuery, (err) => {
         if (err) {
             return console.error('Error executing query', console.log(err));
@@ -137,7 +138,6 @@ Generates a keys: string[] array that contains the names of each attribute.
 function generateKeys(rows): string[] {
     let keys: string[] = [];
     for(let i = 0; i < rows.length; i++) {
-        //let jsonVer = convert.xml2js(rows[i], {compact: true, spaces: 2});
         let temp: string[] = Object.getOwnPropertyNames(rows[i].row._attributes);
         if(temp.length > keys.length) {
             keys = temp;
@@ -152,7 +152,6 @@ Generates a types: number[] array that contains the data type of each key.
 function generateTypes(rows, keys: string[]): string[] {
     const types: string[] = [];
     let currentColumn: string = '';
-    //let jsRow = convert.xml2js(rows[0], {compact: true});
 
     for(let i = 0; i < keys.length; i++) {
         currentColumn = rows[0].row._attributes[keys[i]];
@@ -160,7 +159,6 @@ function generateTypes(rows, keys: string[]): string[] {
         //If first row has undefined attribute, check next row for initial attribute until one is found
         if(currentColumn === undefined) {
             for(let j = 1; j < rows.length && currentColumn === undefined; j++) {
-                //let temp = convert.xml2js(rows[j], {compact: true});
                 currentColumn = rows[j].row._attributes[keys[i]];
             }
         }
@@ -178,7 +176,6 @@ function generateTypes(rows, keys: string[]): string[] {
     //Checks if any rows don't match the first row's types
     for(let i = 1; i < 100 && i < rows.length; i++) {
         let invalid = false;
-        //jsRow = convert.xml2js(rows[i], {compact: true});
         for(let j = 0; j < types.length && !invalid; j++) {
             currentColumn = rows[i].row._attributes[keys[j]];
 
@@ -212,7 +209,7 @@ Generates the CREATE TABLE SQL statement for one .xml file.
 function generateCreate(fileName: string, types: string[], keys: string[]): void {
     let query: string;
 
-    console.log('Reading ' + fileName + '...');
+    console.log('Processing ' + fileName + '...');
     query = 'CREATE TABLE ' + fileName.replace('.xml','') + '(\n';
     for(let i = 0; i < keys.length; i++) {
         if(i === 0) {
@@ -223,7 +220,7 @@ function generateCreate(fileName: string, types: string[], keys: string[]): void
             query += keys[i] + ' ' + types[i] + ',\n';
         }
     }
-    fs.appendFileSync('./Output/complete.sql', query);
+    fs.appendFileSync('./Output/temp.sql', query);
 }
 
 /*
@@ -234,7 +231,6 @@ function generateInsert(fileName: string, rows, keys: string[], types: string[],
     let value: string;
 
     for(let i = 0; i < rows.length; i++) {
-        //let jsRow = convert.xml2js(file[i], {compact: true});
         query = 'INSERT INTO ' + fileName.replace('.xml','') + ' VALUES(';
         for(let j = 0; j < keys.length; j++) {
             value = rows[i].row._attributes[keys[j]];
@@ -262,7 +258,7 @@ function generateInsert(fileName: string, rows, keys: string[], types: string[],
         } else {
             query += ');\n';
         }
-        fs.appendFileSync('./Output/complete.sql', query);
+        fs.appendFileSync('./Output/temp.sql', query);
     }
 }
 
@@ -274,6 +270,7 @@ function cleanUp(xmlList: string[]): void {
         fs.unlinkSync('./Output/' + xmlList[i]);
     }
 
-    fs.unlinkSync('./Output/complete.sql');
+    fs.unlinkSync('./Output/temp.sql');
     fs.rmdirSync('./Output');
+    console.log('Queries submitted.');
 }
