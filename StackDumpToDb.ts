@@ -24,8 +24,14 @@ if(process.argv.length === 3) {
     let download = downloadFile(urlStart + choice);
     download.then(function() {
         console.log('Download complete. Unzipping...');
+        fs.mkdirSync('./Output');
         let unzip = unzipFile();
         unzip.then(function() {
+            if(fs.readdirSync('./Output').length === 0) {
+                console.log('No file unzipped, exiting program.');
+                cleanUp([], false);
+                process.exit(0);
+            }
             console.log('Unzipping complete.');
             fs.unlinkSync('./' + choice);
             generateQueries();
@@ -89,7 +95,7 @@ function generateQueries(): void {
     xmlList = xmlList.filter(file => file.substring(file.length - 3) === 'xml');
     
     //Loop through files in folder
-    let lastRow: boolean = false;
+    let fullColumnList = [];
     for(let i = 0; i < xmlList.length; i++) {
 
         //Read XML to create an array of rows, cut off XML tags at beginning of file
@@ -104,17 +110,16 @@ function generateQueries(): void {
 
         //Generate column names and column data types
         const columnList: string[] = generateColumns(jsonArray.slice(0, 101));
+        fullColumnList[i] = columnList;
         const dataTypes: string[] = generateTypes(jsonArray, columnList);
 
         //Generate SQL queries
-        if(i === xmlList.length - 1) {
-            lastRow = true;
-        }
         generateCreate(currentXml, dataTypes, columnList);
-        generateInsert(currentXml, jsonArray, columnList, dataTypes, lastRow);
+        generateInsert(currentXml, jsonArray, columnList, dataTypes);
         console.log(currentXml + ' processed.');
         
     }
+    generateForeignKeys(xmlList, fullColumnList);
 
     const superQuery = {
         text: fs.readFileSync('./Output/temp.sql').toString(),
@@ -123,9 +128,11 @@ function generateQueries(): void {
     console.log('Submitting queries to database...');
     pool.query(superQuery, (err) => {
         if (err) {
+            cleanUp(xmlList, true);
             return console.error('Error executing query', console.log(err));
         } else {
-            cleanUp(xmlList);
+            cleanUp(xmlList, true);
+            console.log('Queries submitted.');
         }
     });
     pool.end();
@@ -229,7 +236,7 @@ function generateCreate(currentXml: string, dataTypes: string[], columnList: str
 /*
 Generates the INSERT ROW SQL statements for one .xml file.
 */
-function generateInsert(currentXml: string, jsonArray, columnList: string[], dataTypes: string[], lastRow: boolean): void {
+function generateInsert(currentXml: string, jsonArray, columnList: string[], dataTypes: string[]): void {
     let query: string;
     let value: string;
 
@@ -255,25 +262,67 @@ function generateInsert(currentXml: string, jsonArray, columnList: string[], dat
                 query += ', ';
             }
         }
-        if(i === jsonArray.length - 1 && lastRow) {
-            //node-postgres requires that the last statement not have a semicolon as it is added automatically
-            query += ')';
-        } else {
-            query += ');\n';
-        }
+        query += ');\n';
         fs.appendFileSync('./Output/temp.sql', query);
+    }
+}
+
+/*
+Generates foreign keys based on similar attributes. 
+Primary key must be named Id and foreign keys must end in Id while containing the name of the table with which it should be linked.
+Deletes any rows that prevent the addition of a foreign key.
+*/
+function generateForeignKeys(xmlList, fullColumnList): void {
+    fs.appendFileSync('./Output/temp.sql', fs.readFileSync('./StackExchangeExtras.sql').toString('utf-8'));
+    let query: string = '';
+    let xmlListNoExtension: string[] = [];
+
+    for(let i = 0; i < xmlList.length; i++) {
+        xmlListNoExtension.push(xmlList[i].substr(0, xmlList[i].length - 4));
+    }
+    if(choice.includes('stackexchange')) {
+        xmlListNoExtension.push('VoteTypes', 'PostHistoryTypes', 'PostTypes');
+    }
+
+    for(let i = 0; i < xmlList.length; i++) {
+        for(let j = 1; j < fullColumnList[i].length; j++) {
+            let found: string = '';
+            if(fullColumnList[i][j].endsWith('Id')) {
+                for(let k = 0; k < xmlListNoExtension.length; k++) {
+                    let condition: boolean;
+                    condition = fullColumnList[i][j].includes(xmlListNoExtension[k]);
+                    condition = condition || fullColumnList[i][j].includes(xmlListNoExtension[k].substr(0, xmlListNoExtension[k].length - 1));
+                    condition = condition && i !== k && found.length < xmlListNoExtension[k].length;
+                    if(condition) {
+                        found = xmlListNoExtension[k];
+                    }
+                }
+            }
+            if(found) {
+                query += 'DELETE FROM ' + xmlListNoExtension[i] + ' WHERE ' + fullColumnList[i][j];
+                query += ' NOT IN (SELECT ' + found + '.Id FROM ' + found + ');\n';
+                query += 'ALTER TABLE ' + xmlListNoExtension[i] + ' ADD CONSTRAINT ';
+                query += xmlListNoExtension[i] + '_' + fullColumnList[i][j] + 'fk FOREIGN KEY (';
+                query += fullColumnList[i][j] + ') REFERENCES ' + found + '(Id);';
+            }
+        }
+    }
+    if(query) {
+        //fs.appendFileSync('./Output/temp.sql', query.substr(0, query.length - 1));
+        fs.appendFileSync('./Output/temp.sql', query + 'i');
     }
 }
 
 /*
 Deletes .xml, .sql and the directory used to hold those files after the query has run.
 */
-function cleanUp(xmlList: string[]): void {
+function cleanUp(xmlList: string[], tempCreated: boolean): void {
     for(let i = 0; i < xmlList.length; i++) {
         fs.unlinkSync('./Output/' + xmlList[i]);
     }
 
-    fs.unlinkSync('./Output/temp.sql');
+    if(tempCreated) {
+        fs.unlinkSync('./Output/temp.sql');
+    }
     fs.rmdirSync('./Output');
-    console.log('Queries submitted.');
 }

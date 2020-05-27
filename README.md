@@ -17,7 +17,6 @@ pg
 ## To do:
 * Clean up code
 * Add strong typing where it is missing
-* Proper error handling
-* Add foreign keys
+* Error handling
 * Decide on how much scanning should be done, column types are inferred based on a selection of rows. While it is (in theory) not foolproof in determining column types, it has thus far been able to do so by looking at 100 rows rather than scanning the whole file, which largely decreases runtime by some function of dump size.
 * Add a loading bar if possible because it's impossible to tell how far along a download is
