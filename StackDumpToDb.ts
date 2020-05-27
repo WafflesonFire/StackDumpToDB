@@ -309,7 +309,7 @@ function generateForeignKeys(xmlList, fullColumnList): void {
     }
     if(query) {
         //fs.appendFileSync('./Output/temp.sql', query.substr(0, query.length - 1));
-        fs.appendFileSync('./Output/temp.sql', query + 'i');
+        fs.appendFileSync('./Output/temp.sql', query);
     }
 }
 
