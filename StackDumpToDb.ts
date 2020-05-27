@@ -29,7 +29,7 @@ if(process.argv.length === 3) {
         unzip.then(function() {
             if(fs.readdirSync('./Output').length === 0) {
                 console.log('No file unzipped, exiting program.');
-                cleanUp([], false);
+                cleanUp([]);
                 process.exit(0);
             }
             console.log('Unzipping complete.');
@@ -88,7 +88,7 @@ function generateQueries(): void {
         choice = '_' + choice;
     }
     let firstQuery = 'CREATE SCHEMA ' + choice.substr(0, choice.indexOf('.'));
-    firstQuery += '; SET search_path TO ' + choice.substr(0, choice.indexOf('.')) + ';';
+    firstQuery += ';\n SET search_path TO ' + choice.substr(0, choice.indexOf('.')) + ';\n';
     fs.writeFileSync('./Output/temp.sql', firstQuery);
     
     let xmlList: string[] = fs.readdirSync('./Output');
@@ -115,11 +115,12 @@ function generateQueries(): void {
         
     }
     generateForeignKeys(xmlList, fullColumnList);
+    /*
     const superQuery = {
         text: fs.readFileSync('./Output/temp.sql').toString(),
         rowMode: 'array',
     }
-    /*
+    
     console.log('Submitting queries to database...');
     pool.query(superQuery, (err) => {
         if (err) {
@@ -303,12 +304,11 @@ function generateForeignKeys(xmlList, fullColumnList): void {
                 query += ' NOT IN (SELECT ' + found + '.Id FROM ' + found + ');\n';
                 query += 'ALTER TABLE ' + xmlListNoExtension[i] + ' ADD CONSTRAINT ';
                 query += xmlListNoExtension[i] + '_' + fullColumnList[i][j] + 'fk FOREIGN KEY (';
-                query += fullColumnList[i][j] + ') REFERENCES ' + found + '(Id);';
+                query += fullColumnList[i][j] + ') REFERENCES ' + found + '(Id);\n';
             }
         }
     }
     if(query) {
-        //fs.appendFileSync('./Output/temp.sql', query.substr(0, query.length - 1));
         fs.appendFileSync('./Output/temp.sql', query);
     }
 }
@@ -316,13 +316,8 @@ function generateForeignKeys(xmlList, fullColumnList): void {
 /*
 Deletes .xml, .sql and the directory used to hold those files after the query has run.
 */
-function cleanUp(xmlList: string[], tempCreated: boolean): void {
+function cleanUp(xmlList: string[]): void {
     for(let i = 0; i < xmlList.length; i++) {
         fs.unlinkSync('./Output/' + xmlList[i]);
     }
-
-    if(tempCreated) {
-        //fs.unlinkSync('./Output/temp.sql');
-    }
-    //fs.rmdirSync('./Output');
 }
