@@ -102,29 +102,24 @@ function generateQueries(): void {
         let currentXml: string = xmlList[i].toLowerCase();
         let splitText: string[] = (fs.readFileSync('./Output/' + xmlList[i])).toString('utf-8').split('\n');
         splitText = splitText.slice(2, splitText.length - 1);
-        let jsonArray = [];
-        for(let i = 0; i < splitText.length; i++) {
-            jsonArray[i] = convert.xml2js(splitText[i], {compact: true});
-        }
-        splitText = null;
 
         //Generate column names and column data types
-        const columnList: string[] = generateColumns(jsonArray.slice(0, 101));
+        const columnList: string[] = generateColumns(splitText.slice(0, 101));
         fullColumnList[i] = columnList;
-        const dataTypes: string[] = generateTypes(jsonArray, columnList);
+        const dataTypes: string[] = generateTypes(splitText, columnList);
 
         //Generate SQL queries
         generateCreate(currentXml, dataTypes, columnList);
-        generateInsert(currentXml, jsonArray, columnList, dataTypes);
+        generateInsert(currentXml, splitText, columnList, dataTypes);
         console.log(currentXml + ' processed.');
         
     }
     generateForeignKeys(xmlList, fullColumnList);
-
     const superQuery = {
         text: fs.readFileSync('./Output/temp.sql').toString(),
         rowMode: 'array',
     }
+    /*
     console.log('Submitting queries to database...');
     pool.query(superQuery, (err) => {
         if (err) {
@@ -136,16 +131,17 @@ function generateQueries(): void {
         }
     });
     pool.end();
-    
+    */
 }
 
 /*
 Generates a column list that contains the names of each column.
 */
-function generateColumns(jsonArray): string[] {
+function generateColumns(splitText): string[] {
     let columnList: string[] = [];
-    for(let i = 0; i < jsonArray.length; i++) {
-        let temp: string[] = Object.getOwnPropertyNames(jsonArray[i].row._attributes);
+    for(let i = 0; i < splitText.length; i++) {
+        let jsonVer = convert.xml2js(splitText[i], {compact: true, spaces: 2});
+        let temp: string[] = Object.getOwnPropertyNames(jsonVer.row._attributes);
         if(temp.length > columnList.length) {
             columnList = temp;
         }
@@ -156,17 +152,19 @@ function generateColumns(jsonArray): string[] {
 /*
 Generates a dataTypes: number[] array that contains the data type of each key.
 */
-function generateTypes(jsonArray, columnList: string[]): string[] {
+function generateTypes(splitText, columnList: string[]): string[] {
     const dataTypes: string[] = [];
     let currentColumn: string = '';
 
     for(let i = 0; i < columnList.length; i++) {
-        currentColumn = jsonArray[0].row._attributes[columnList[i]];
+        let jsonVer = convert.xml2js(splitText[0], {compact: true});
+        currentColumn = jsonVer.row._attributes[columnList[i]];
 
         //If first row has undefined attribute, check next row for initial attribute until one is found
         if(currentColumn === undefined) {
-            for(let j = 1; j < jsonArray.length && currentColumn === undefined; j++) {
-                currentColumn = jsonArray[j].row._attributes[columnList[i]];
+            for(let j = 1; j < splitText.length && currentColumn === undefined; j++) {
+                jsonVer = convert.xml2js(splitText[j], {compact: true});
+                currentColumn = jsonVer.row._attributes[columnList[i]];
             }
         }
         
@@ -186,8 +184,9 @@ function generateTypes(jsonArray, columnList: string[]): string[] {
             continue;
         }
         let invalid: boolean = false;
-        for(let j = 1; j < 100 && j < jsonArray.length && !invalid; j++) {
-            currentColumn = jsonArray[j].row._attributes[columnList[i]];
+        for(let j = 1; j < 100 && j < splitText.length && !invalid; j++) {
+            let jsonVer = convert.xml2js(splitText[j], {compact: true});
+            currentColumn = jsonVer.row._attributes[columnList[i]];
 
             if(currentColumn !== undefined) {
                 if(dataTypes[i] === 'INTEGER') {
@@ -236,14 +235,15 @@ function generateCreate(currentXml: string, dataTypes: string[], columnList: str
 /*
 Generates the INSERT ROW SQL statements for one .xml file.
 */
-function generateInsert(currentXml: string, jsonArray, columnList: string[], dataTypes: string[]): void {
+function generateInsert(currentXml: string, splitText, columnList: string[], dataTypes: string[]): void {
     let query: string;
     let value: string;
 
-    for(let i = 0; i < jsonArray.length; i++) {
+    for(let i = 0; i < splitText.length; i++) {
         query = 'INSERT INTO ' + currentXml.replace('.xml','') + ' VALUES(';
+        let jsonVer = convert.xml2js(splitText[i], {compact: true})
         for(let j = 0; j < columnList.length; j++) {
-            value = jsonArray[i].row._attributes[columnList[j]];
+            value = jsonVer.row._attributes[columnList[j]];
             if(value) {
                 if(dataTypes[j] === 'TEXT') {
                     value = value.replace(/\'/g,'\'\'');
@@ -322,7 +322,7 @@ function cleanUp(xmlList: string[], tempCreated: boolean): void {
     }
 
     if(tempCreated) {
-        fs.unlinkSync('./Output/temp.sql');
+        //fs.unlinkSync('./Output/temp.sql');
     }
-    fs.rmdirSync('./Output');
+    //fs.rmdirSync('./Output');
 }
