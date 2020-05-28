@@ -323,7 +323,7 @@ function cleanUp(xmlList: string[], tempCreated: boolean): void {
     }
 
     if(tempCreated) {
-        //fs.unlinkSync('./Output/temp.sql');
+        fs.unlinkSync('./Output/temp.sql');
     }
-    //fs.rmdirSync('./Output');
+    fs.rmdirSync('./Output');
 }
